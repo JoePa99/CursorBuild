@@ -80,11 +80,18 @@ const DocumentManager = ({ companyData, updateCompanyData }: DocumentManagerProp
       });
 
       if (!response.ok) {
-        throw new Error('Failed to upload document');
+        const errorText = await response.text();
+        console.error('Upload failed:', response.status, errorText);
+        toast.error(`Failed to upload document: ${response.status}`);
+        return;
       }
 
       const data = await response.json();
-      
+      if (!data || !data.document_info) {
+        console.error('Upload succeeded but response is missing document_info:', data);
+        toast.error('Upload succeeded but response is invalid.');
+        return;
+      }
       // Update company data with new document
       if (companyData) {
         const updatedCompanyData = {
@@ -95,14 +102,12 @@ const DocumentManager = ({ companyData, updateCompanyData }: DocumentManagerProp
       }
 
       toast.success(`Document "${selectedFile.name}" uploaded successfully!`);
-      
       // Reset form
       setSelectedFile(null);
       setDocumentType('');
       setDescription('');
       const fileInput = document.getElementById('file-input') as HTMLInputElement;
       if (fileInput) fileInput.value = '';
-      
     } catch (error) {
       console.error('Error uploading document:', error);
       toast.error('Failed to upload document. Please try again.');
