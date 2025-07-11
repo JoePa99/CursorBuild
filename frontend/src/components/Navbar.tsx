@@ -1,16 +1,30 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Brain, MessageSquare, FileText, TrendingUp, BarChart3 } from 'lucide-react';
+import { Brain, MessageSquare, Database, TrendingUp, FileText, Building2 } from 'lucide-react';
 
-const Navbar = () => {
+interface CompanyData {
+  name: string;
+  industry: string;
+  description: string;
+  business_processes: string[];
+  goals: string[];
+  context_summary: string;
+  documents: any[];
+}
+
+interface NavbarProps {
+  companyData: CompanyData;
+}
+
+const Navbar = ({ companyData }: NavbarProps) => {
   const location = useLocation();
 
   const navItems = [
-    { path: '/', label: 'Dashboard', icon: BarChart3 },
-    { path: '/content-studio', label: 'Content Studio', icon: FileText },
-    { path: '/qa-chat', label: 'Q&A Chat', icon: MessageSquare },
-    { path: '/sales-generator', label: 'Sales Generator', icon: TrendingUp },
-    { path: '/document-analysis', label: 'Document Analysis', icon: Brain },
+    { path: '/', label: 'Dashboard', icon: Brain },
+    { path: '/knowledge-base', label: 'Knowledge Base', icon: Database },
+    { path: '/context-chat', label: 'Context Chat', icon: MessageSquare },
+    { path: '/business-intelligence', label: 'Business Intelligence', icon: TrendingUp },
+    { path: '/document-manager', label: 'Document Manager', icon: FileText },
   ];
 
   return (
@@ -19,8 +33,13 @@ const Navbar = () => {
         <div className="flex justify-between h-16">
           <div className="flex items-center">
             <Link to="/" className="flex items-center space-x-2">
-              <Brain className="h-8 w-8 text-primary-600" />
-              <span className="text-xl font-bold text-gray-900">Blueprint AI</span>
+              <Building2 className="h-8 w-8 text-primary-600" />
+              <div>
+                <span className="text-xl font-bold text-gray-900">Blueprint AI</span>
+                {companyData.name && (
+                  <p className="text-xs text-gray-500 -mt-1">{companyData.name}</p>
+                )}
+              </div>
             </Link>
           </div>
           
@@ -44,6 +63,13 @@ const Navbar = () => {
                 </Link>
               );
             })}
+          </div>
+
+          <div className="flex items-center space-x-4">
+            <div className="hidden md:block text-right">
+              <p className="text-sm font-medium text-gray-900">{companyData.industry}</p>
+              <p className="text-xs text-gray-500">{companyData.documents.length} documents</p>
+            </div>
           </div>
         </div>
       </div>

@@ -1,53 +1,67 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Brain, MessageSquare, FileText, TrendingUp, Zap, Users, Clock, Target } from 'lucide-react';
+import { Brain, MessageSquare, FileText, TrendingUp, Zap, Users, Clock, Target, Database, Building2 } from 'lucide-react';
 
-const Dashboard = () => {
+interface CompanyData {
+  name: string;
+  industry: string;
+  description: string;
+  business_processes: string[];
+  goals: string[];
+  context_summary: string;
+  documents: any[];
+}
+
+interface DashboardProps {
+  companyData: CompanyData;
+}
+
+const Dashboard = ({ companyData }: DashboardProps) => {
   const features = [
     {
-      title: 'Content Studio',
-      description: 'Generate compelling content with AI assistance',
-      icon: FileText,
-      path: '/content-studio',
+      title: 'Knowledge Base',
+      description: 'View and manage your company knowledge',
+      icon: Database,
+      path: '/knowledge-base',
       color: 'bg-blue-500',
     },
     {
-      title: 'Q&A Chat',
-      description: 'Ask questions and get intelligent answers',
+      title: 'Context Chat',
+      description: 'AI conversations using company context',
       icon: MessageSquare,
-      path: '/qa-chat',
+      path: '/context-chat',
       color: 'bg-green-500',
     },
     {
-      title: 'Sales Generator',
-      description: 'Create persuasive sales content',
+      title: 'Business Intelligence',
+      description: 'Generate context-aware business content',
       icon: TrendingUp,
-      path: '/sales-generator',
+      path: '/business-intelligence',
       color: 'bg-purple-500',
     },
     {
-      title: 'Document Analysis',
-      description: 'Analyze documents with AI insights',
-      icon: Brain,
-      path: '/document-analysis',
+      title: 'Document Manager',
+      description: 'Upload and process company documents',
+      icon: FileText,
+      path: '/document-manager',
       color: 'bg-orange-500',
     },
   ];
 
   const stats = [
-    { label: 'AI Models', value: '1', icon: Brain },
-    { label: 'Features', value: '4', icon: Zap },
-    { label: 'Response Time', value: '<2s', icon: Clock },
-    { label: 'Accuracy', value: '95%', icon: Target },
+    { label: 'Company', value: companyData.name, icon: Building2 },
+    { label: 'Documents', value: companyData.documents.length.toString(), icon: Database },
+    { label: 'Processes', value: companyData.business_processes.length.toString(), icon: Target },
+    { label: 'Goals', value: companyData.goals.length.toString(), icon: TrendingUp },
   ];
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Blueprint AI Dashboard</h1>
+        <h1 className="text-3xl font-bold text-gray-900">Welcome to {companyData.name}</h1>
         <p className="mt-2 text-gray-600">
-          Your AI-powered corporate intelligence platform
+          Your AI-powered corporate intelligence platform for {companyData.industry}
         </p>
       </div>
 
