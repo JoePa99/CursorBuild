@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import uvicorn
+import os
 
 from app.api.routes import api_router
 from app.core.config import settings
@@ -45,10 +46,11 @@ async def health_check():
     return {"status": "healthy", "service": "blueprint-ai"}
 
 if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 8080))
     uvicorn.run(
         "main:app",
         host="0.0.0.0",
-        port=8000,
+        port=port,
         reload=True,
         log_level="info"
     ) 
