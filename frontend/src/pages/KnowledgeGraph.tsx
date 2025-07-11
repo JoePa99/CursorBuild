@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Network, Search, Database, TrendingUp, Users, FileText, Target } from 'lucide-react';
+import { Network, Search, Database, TrendingUp, Users, FileText, Target, Upload } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 interface CompanyData {
@@ -10,10 +10,13 @@ interface CompanyData {
   goals: string[];
   context_summary: string;
   documents: any[];
+  departments: string[];
+  products_services: string[];
+  key_metrics: string[];
 }
 
 interface KnowledgeGraphProps {
-  companyData: CompanyData;
+  companyData: CompanyData | null;
 }
 
 interface GraphStats {
@@ -30,8 +33,10 @@ const KnowledgeGraph = ({ companyData }: KnowledgeGraphProps) => {
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
-    fetchGraphStats();
-  }, []);
+    if (companyData) {
+      fetchGraphStats();
+    }
+  }, [companyData]);
 
   const fetchGraphStats = async () => {
     try {
@@ -46,7 +51,7 @@ const KnowledgeGraph = ({ companyData }: KnowledgeGraphProps) => {
   };
 
   const searchGraph = async () => {
-    if (!searchQuery.trim()) return;
+    if (!searchQuery.trim() || !companyData) return;
 
     setIsLoading(true);
     try {
@@ -111,6 +116,24 @@ const KnowledgeGraph = ({ companyData }: KnowledgeGraphProps) => {
         return 'text-gray-600';
     }
   };
+
+  if (!companyData) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="text-center">
+          <Network className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Knowledge Graph</h2>
+          <p className="text-gray-600 mb-6">
+            Upload some documents first to build your knowledge graph
+          </p>
+          <a href="/document-manager" className="btn-primary inline-flex items-center">
+            <Upload className="h-4 w-4 mr-2" />
+            Upload Documents
+          </a>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
