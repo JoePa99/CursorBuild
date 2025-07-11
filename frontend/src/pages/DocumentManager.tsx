@@ -74,7 +74,7 @@ const DocumentManager = ({ companyData, updateCompanyData }: DocumentManagerProp
       formData.append('document_type', documentType);
       formData.append('description', description);
 
-      const response = await fetch('https://cursorbuild-production.up.railway.app/api/v1/upload-document', {
+      const response = await fetch('https://cursorbuild-production.up.railway.app/api/v1/documents/upload', {
         method: 'POST',
         body: formData,
       });
