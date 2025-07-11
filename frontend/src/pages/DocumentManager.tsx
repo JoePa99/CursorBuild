@@ -13,7 +13,7 @@ interface CompanyData {
 }
 
 interface DocumentManagerProps {
-  companyData: CompanyData;
+  companyData: CompanyData | null;
   updateCompanyData: (data: CompanyData) => void;
 }
 
@@ -83,11 +83,13 @@ const DocumentManager = ({ companyData, updateCompanyData }: DocumentManagerProp
       const data = await response.json();
       
       // Update company data with new document
-      const updatedCompanyData = {
-        ...companyData,
-        documents: [...companyData.documents, data.document_info]
-      };
-      updateCompanyData(updatedCompanyData);
+      if (companyData) {
+        const updatedCompanyData = {
+          ...companyData,
+          documents: [...companyData.documents, data.document_info]
+        };
+        updateCompanyData(updatedCompanyData);
+      }
 
       toast.success(`Document "${selectedFile.name}" uploaded successfully!`);
       
@@ -241,18 +243,18 @@ const DocumentManager = ({ companyData, updateCompanyData }: DocumentManagerProp
         <div className="card">
           <h2 className="text-xl font-semibold text-gray-900 mb-6 flex items-center">
             <FileText className="h-5 w-5 mr-2" />
-            Knowledge Base ({companyData.documents.length} documents)
+            Knowledge Base ({companyData?.documents?.length || 0} documents)
           </h2>
           
           <div className="space-y-4">
-            {companyData.documents.length === 0 ? (
+            {!companyData || companyData.documents.length === 0 ? (
               <div className="text-center py-8 text-gray-500">
                 <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
                 <p>No documents uploaded yet</p>
                 <p className="text-sm">Upload your first document to start building context</p>
               </div>
             ) : (
-              companyData.documents.map((doc, index) => (
+              companyData?.documents?.map((doc, index) => (
                 <div key={index} className="border border-gray-200 rounded-lg p-4">
                   <div className="flex items-start justify-between">
                     <div className="flex items-start space-x-3">
@@ -279,7 +281,7 @@ const DocumentManager = ({ companyData, updateCompanyData }: DocumentManagerProp
             )}
           </div>
 
-          {companyData.documents.length > 0 && (
+          {companyData && companyData.documents.length > 0 && (
             <div className="mt-6 p-4 bg-green-50 border border-green-200 rounded-lg">
               <div className="flex items-start">
                 <Database className="h-4 w-4 text-green-600 mt-0.5 mr-2" />

@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import Navbar from './components/Navbar';
-import CompanySetup from './pages/CompanySetup';
 import KnowledgeBase from './pages/KnowledgeBase';
 import ContextChat from './pages/ContextChat';
 import KnowledgeGraph from './pages/KnowledgeGraph';
@@ -18,6 +17,9 @@ interface CompanyData {
   goals: string[];
   context_summary: string;
   documents: any[];
+  departments: string[];
+  products_services: string[];
+  key_metrics: string[];
 }
 
 function App() {
@@ -62,23 +64,17 @@ function App() {
   return (
     <Router>
       <div className="min-h-screen bg-gray-50">
-        {companyData ? (
-          <>
-            <Navbar companyData={companyData} />
-            <main className="pt-16">
-              <Routes>
-                <Route path="/" element={<Dashboard companyData={companyData} />} />
-                <Route path="/knowledge-base" element={<KnowledgeBase companyData={companyData} updateCompanyData={updateCompanyData} />} />
-                <Route path="/knowledge-graph" element={<KnowledgeGraph companyData={companyData} />} />
-                <Route path="/context-chat" element={<ContextChat companyData={companyData} />} />
-                <Route path="/business-intelligence" element={<BusinessIntelligence companyData={companyData} />} />
-                <Route path="/document-manager" element={<DocumentManager companyData={companyData} updateCompanyData={updateCompanyData} />} />
-              </Routes>
-            </main>
-          </>
-        ) : (
-          <CompanySetup onSetupComplete={updateCompanyData} />
-        )}
+        <Navbar companyData={companyData} />
+        <main className="pt-16">
+          <Routes>
+            <Route path="/" element={<Dashboard companyData={companyData} />} />
+            <Route path="/knowledge-base" element={<KnowledgeBase companyData={companyData} updateCompanyData={updateCompanyData} />} />
+            <Route path="/knowledge-graph" element={<KnowledgeGraph companyData={companyData} />} />
+            <Route path="/context-chat" element={<ContextChat companyData={companyData} />} />
+            <Route path="/business-intelligence" element={<BusinessIntelligence companyData={companyData} />} />
+            <Route path="/document-manager" element={<DocumentManager companyData={companyData} updateCompanyData={updateCompanyData} />} />
+          </Routes>
+        </main>
         <Toaster 
           position="top-right"
           toastOptions={{

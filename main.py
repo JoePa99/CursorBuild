@@ -56,22 +56,20 @@ collection = chroma_client.get_or_create_collection(
     metadata={"description": "Company knowledge base and context"}
 )
 
-# Store company metadata
+# Store company metadata - will be auto-extracted
 company_data = {
     "name": "",
     "industry": "",
-    "documents": [],
-    "context_summary": "",
+    "description": "",
     "business_processes": [],
-    "key_metrics": []
+    "goals": [],
+    "context_summary": "",
+    "documents": [],
+    "extracted_entities": [],
+    "key_metrics": [],
+    "departments": [],
+    "products_services": []
 }
-
-class CompanySetup(BaseModel):
-    name: str
-    industry: str
-    description: str
-    key_processes: List[str]
-    goals: List[str]
 
 class ContextQuery(BaseModel):
     query: str
@@ -94,10 +92,45 @@ async def health_check():
         "message": "Blueprint AI Corporate Intelligence Platform",
         "version": "2.0.0",
         "company_configured": bool(company_data["name"]),
-        "documents_loaded": len(company_data["documents"])
+        "documents_loaded": len(company_data["documents"]),
+        "auto_extracted": True
     }
 
-def create_knowledge_graph(tx, company_name, industry, processes, goals):
+def extract_company_info_from_documents(all_documents_text: str) -> dict:
+    """Extract comprehensive company information from all uploaded documents"""
+    
+    if not GOOGLE_API_KEY:
+        return {}
+    
+    prompt = f"""
+    Analyze this comprehensive collection of company documents and extract detailed company information.
+    
+    Documents Content: {all_documents_text[:8000]}  # Limit for API
+    
+    Extract and return as JSON:
+    {{
+        "company_name": "extracted company name",
+        "industry": "primary industry or sector",
+        "description": "comprehensive company description (2-3 sentences)",
+        "business_processes": ["list of key business processes", "another process"],
+        "goals": ["primary business goals", "secondary goals"],
+        "departments": ["list of departments or teams"],
+        "products_services": ["main products or services"],
+        "key_metrics": ["important business metrics they track"],
+        "context_summary": "detailed business context summary (3-4 sentences)"
+    }}
+    
+    Be thorough and extract as much information as possible from the documents.
+    """
+    
+    try:
+        response = model.generate_content(prompt)
+        result = json.loads(response.text)
+        return result
+    except:
+        return {}
+
+def create_knowledge_graph(tx, company_name, industry, processes, goals, departments, products):
     """Create initial knowledge graph structure for company"""
     
     # Create Company node
@@ -121,6 +154,22 @@ def create_knowledge_graph(tx, company_name, industry, processes, goals):
             MERGE (c:Company {name: $company})
             MERGE (c)-[:HAS_GOAL]->(g)
             """, goal=goal, company=company_name)
+    
+    # Create Department nodes and relationships
+    for dept in departments:
+        tx.run("""
+            MERGE (d:Department {name: $dept})
+            MERGE (c:Company {name: $company})
+            MERGE (c)-[:HAS_DEPARTMENT]->(d)
+            """, dept=dept, company=company_name)
+    
+    # Create Product/Service nodes and relationships
+    for product in products:
+        tx.run("""
+            MERGE (p:Product {name: $product})
+            MERGE (c:Company {name: $company})
+            MERGE (c)-[:OFFERS]->(p)
+            """, product=product, company=company_name)
 
 def extract_entities_and_relationships(text, document_id, document_type):
     """Extract entities and relationships from document text"""
@@ -216,47 +265,6 @@ def query_knowledge_graph(tx, query, depth=2):
     result = tx.run(cypher_query, query=query)
     return [record.data() for record in result]
 
-@app.post("/setup-company")
-async def setup_company(setup: CompanySetup):
-    """Initialize company context and business profile"""
-    global company_data
-    
-    company_data.update({
-        "name": setup.name,
-        "industry": setup.industry,
-        "description": setup.description,
-        "business_processes": setup.key_processes,
-        "goals": setup.goals
-    })
-    
-    # Create knowledge graph structure
-    with neo4j_driver.session() as session:
-        session.execute_write(create_knowledge_graph, 
-                            setup.name, setup.industry, 
-                            setup.key_processes, setup.goals)
-    
-    # Generate initial context summary
-    context_prompt = f"""
-    Company: {setup.name}
-    Industry: {setup.industry}
-    Description: {setup.description}
-    Key Processes: {', '.join(setup.key_processes)}
-    Goals: {', '.join(setup.goals)}
-    
-    Create a comprehensive business context summary that captures the essence of this company.
-    Include typical challenges, opportunities, and business context for this type of organization.
-    """
-    
-    if GOOGLE_API_KEY:
-        response = model.generate_content(context_prompt)
-        company_data["context_summary"] = response.text
-    
-    return {
-        "status": "success",
-        "message": f"Company {setup.name} configured successfully",
-        "company_data": company_data
-    }
-
 @app.post("/upload-document")
 async def upload_document(
     file: UploadFile = File(...),
@@ -264,9 +272,6 @@ async def upload_document(
     description: str = Form("")
 ):
     """Upload and process company documents for context building"""
-    
-    if not company_data["name"]:
-        raise HTTPException(status_code=400, detail="Please setup company first")
     
     # Validate file type
     allowed_types = ['.pdf', '.docx', '.txt', '.md']
@@ -316,15 +321,6 @@ async def upload_document(
             text_content, document_id, document_type
         )
         
-        # Add to knowledge graph
-        with neo4j_driver.session() as session:
-            session.execute_write(add_document_to_knowledge_graph,
-                                document_id, file.filename, document_type,
-                                extracted_knowledge["entities"],
-                                extracted_knowledge["relationships"],
-                                extracted_knowledge["concepts"],
-                                company_data["name"])
-        
         # Update company data
         doc_info = DocumentInfo(
             filename=file.filename,
@@ -334,13 +330,59 @@ async def upload_document(
         )
         company_data["documents"].append(doc_info.dict())
         
+        # Auto-extract company information if this is the first document or we don't have company info yet
+        if not company_data["name"] or len(company_data["documents"]) == 1:
+            # Collect all document text for company extraction
+            all_text = ""
+            for doc in company_data["documents"]:
+                # This is simplified - in production you'd store the full text
+                all_text += text_content + " "
+            
+            extracted_company_info = extract_company_info_from_documents(all_text)
+            
+            if extracted_company_info:
+                company_data.update({
+                    "name": extracted_company_info.get("company_name", ""),
+                    "industry": extracted_company_info.get("industry", ""),
+                    "description": extracted_company_info.get("description", ""),
+                    "business_processes": extracted_company_info.get("business_processes", []),
+                    "goals": extracted_company_info.get("goals", []),
+                    "departments": extracted_company_info.get("departments", []),
+                    "products_services": extracted_company_info.get("products_services", []),
+                    "key_metrics": extracted_company_info.get("key_metrics", []),
+                    "context_summary": extracted_company_info.get("context_summary", "")
+                })
+                
+                # Create knowledge graph structure
+                with neo4j_driver.session() as session:
+                    session.execute_write(create_knowledge_graph, 
+                                        company_data["name"], company_data["industry"], 
+                                        company_data["business_processes"], company_data["goals"],
+                                        company_data["departments"], company_data["products_services"])
+        
+        # Add to knowledge graph if company is configured
+        if company_data["name"]:
+            with neo4j_driver.session() as session:
+                session.execute_write(add_document_to_knowledge_graph,
+                                    document_id, file.filename, document_type,
+                                    extracted_knowledge["entities"],
+                                    extracted_knowledge["relationships"],
+                                    extracted_knowledge["concepts"],
+                                    company_data["name"])
+        
         return {
             "status": "success",
             "message": f"Document {file.filename} processed successfully",
             "chunks_created": len(chunks),
             "entities_extracted": len(extracted_knowledge["entities"]),
             "relationships_found": len(extracted_knowledge["relationships"]),
-            "document_info": doc_info.dict()
+            "document_info": doc_info.dict(),
+            "company_extracted": bool(company_data["name"]),
+            "company_info": {
+                "name": company_data["name"],
+                "industry": company_data["industry"],
+                "description": company_data["description"]
+            } if company_data["name"] else None
         }
         
     finally:
@@ -351,7 +393,7 @@ async def query_context(query: ContextQuery):
     """Query company knowledge with full context awareness"""
     
     if not company_data["name"]:
-        raise HTTPException(status_code=400, detail="Please setup company first")
+        raise HTTPException(status_code=400, detail="Please upload some documents first to build company context")
     
     # Search relevant documents
     results = collection.query(
@@ -387,7 +429,7 @@ async def query_knowledge_graph_endpoint(query: KnowledgeGraphQuery):
     """Query the knowledge graph directly"""
     
     if not company_data["name"]:
-        raise HTTPException(status_code=400, detail="Please setup company first")
+        raise HTTPException(status_code=400, detail="Please upload some documents first")
     
     with neo4j_driver.session() as session:
         results = session.execute_read(query_knowledge_graph, query.query, query.depth)
@@ -404,7 +446,7 @@ async def get_knowledge_graph_stats():
     """Get statistics about the knowledge graph"""
     
     if not company_data["name"]:
-        raise HTTPException(status_code=400, detail="Please setup company first")
+        raise HTTPException(status_code=400, detail="Please upload some documents first")
     
     with neo4j_driver.session() as session:
         # Get node counts by type
@@ -444,7 +486,8 @@ async def get_company_context():
             "total_documents": len(company_data["documents"]),
             "total_chunks": sum(doc["chunks"] for doc in company_data["documents"]),
             "document_types": list(set(doc["content_type"] for doc in company_data["documents"]))
-        }
+        },
+        "auto_extracted": True
     }
 
 @app.post("/generate-business-content")
@@ -457,7 +500,7 @@ async def generate_business_content(
     """Generate business content using company context"""
     
     if not company_data["name"]:
-        raise HTTPException(status_code=400, detail="Please setup company first")
+        raise HTTPException(status_code=400, detail="Please upload some documents first to build company context")
     
     # Build business context
     business_context = f"""
@@ -466,6 +509,8 @@ async def generate_business_content(
     Context: {company_data['context_summary']}
     Processes: {', '.join(company_data['business_processes'])}
     Goals: {', '.join(company_data['goals'])}
+    Departments: {', '.join(company_data['departments'])}
+    Products/Services: {', '.join(company_data['products_services'])}
     """
     
     # Generate content with company context
@@ -537,6 +582,8 @@ def build_context(query: str, search_results: dict, context_type: str, graph_res
     - Name: {company_data['name']}
     - Industry: {company_data['industry']}
     - Business Context: {company_data['context_summary']}
+    - Departments: {', '.join(company_data['departments'])}
+    - Products/Services: {', '.join(company_data['products_services'])}
     
     Query Context: {query}
     Context Type: {context_type}

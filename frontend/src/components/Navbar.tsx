@@ -13,7 +13,7 @@ interface CompanyData {
 }
 
 interface NavbarProps {
-  companyData: CompanyData;
+  companyData: CompanyData | null;
 }
 
 const Navbar = ({ companyData }: NavbarProps) => {
@@ -35,12 +35,12 @@ const Navbar = ({ companyData }: NavbarProps) => {
           <div className="flex items-center">
             <Link to="/" className="flex items-center space-x-2">
               <Building2 className="h-8 w-8 text-primary-600" />
-              <div>
-                <span className="text-xl font-bold text-gray-900">Blueprint AI</span>
-                {companyData.name && (
-                  <p className="text-xs text-gray-500 -mt-1">{companyData.name}</p>
-                )}
-              </div>
+                              <div>
+                  <span className="text-xl font-bold text-gray-900">Blueprint AI</span>
+                  {companyData?.name && (
+                    <p className="text-xs text-gray-500 -mt-1">{companyData.name}</p>
+                  )}
+                </div>
             </Link>
           </div>
           
@@ -67,10 +67,12 @@ const Navbar = ({ companyData }: NavbarProps) => {
           </div>
 
           <div className="flex items-center space-x-4">
-            <div className="hidden md:block text-right">
-              <p className="text-sm font-medium text-gray-900">{companyData.industry}</p>
-              <p className="text-xs text-gray-500">{companyData.documents.length} documents</p>
-            </div>
+            {companyData && (
+              <div className="hidden md:block text-right">
+                <p className="text-sm font-medium text-gray-900">{companyData.industry}</p>
+                <p className="text-xs text-gray-500">{companyData.documents.length} documents</p>
+              </div>
+            )}
           </div>
         </div>
       </div>
