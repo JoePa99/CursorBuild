@@ -5,6 +5,7 @@ import Navbar from './components/Navbar';
 import CompanySetup from './pages/CompanySetup';
 import KnowledgeBase from './pages/KnowledgeBase';
 import ContextChat from './pages/ContextChat';
+import KnowledgeGraph from './pages/KnowledgeGraph';
 import BusinessIntelligence from './pages/BusinessIntelligence';
 import DocumentManager from './pages/DocumentManager';
 import Dashboard from './pages/Dashboard';
@@ -68,6 +69,7 @@ function App() {
               <Routes>
                 <Route path="/" element={<Dashboard companyData={companyData} />} />
                 <Route path="/knowledge-base" element={<KnowledgeBase companyData={companyData} updateCompanyData={updateCompanyData} />} />
+                <Route path="/knowledge-graph" element={<KnowledgeGraph companyData={companyData} />} />
                 <Route path="/context-chat" element={<ContextChat companyData={companyData} />} />
                 <Route path="/business-intelligence" element={<BusinessIntelligence companyData={companyData} />} />
                 <Route path="/document-manager" element={<DocumentManager companyData={companyData} updateCompanyData={updateCompanyData} />} />

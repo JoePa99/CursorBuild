@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Brain, MessageSquare, Database, TrendingUp, FileText, Building2 } from 'lucide-react';
+import { Brain, MessageSquare, Database, Network, TrendingUp, FileText, Building2 } from 'lucide-react';
 
 interface CompanyData {
   name: string;
@@ -22,6 +22,7 @@ const Navbar = ({ companyData }: NavbarProps) => {
   const navItems = [
     { path: '/', label: 'Dashboard', icon: Brain },
     { path: '/knowledge-base', label: 'Knowledge Base', icon: Database },
+    { path: '/knowledge-graph', label: 'Knowledge Graph', icon: Network },
     { path: '/context-chat', label: 'Context Chat', icon: MessageSquare },
     { path: '/business-intelligence', label: 'Business Intelligence', icon: TrendingUp },
     { path: '/document-manager', label: 'Document Manager', icon: FileText },

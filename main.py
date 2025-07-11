@@ -20,12 +20,23 @@ import fitz  # PyMuPDF
 from docx import Document
 import tempfile
 import shutil
+from neo4j import GraphDatabase
+import spacy
+from collections import defaultdict
 
 # Configure Google Gemini AI
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 if GOOGLE_API_KEY:
     genai.configure(api_key=GOOGLE_API_KEY)
     model = genai.GenerativeModel('gemini-pro')
+
+# Configure Neo4j
+NEO4J_URI = os.getenv("NEO4J_URI", "bolt://localhost:7687")
+NEO4J_USER = os.getenv("NEO4J_USER", "neo4j")
+NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "password")
+
+# Initialize Neo4j driver
+neo4j_driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
 
 app = FastAPI(title="Blueprint AI - Corporate Intelligence Platform", version="2.0.0")
 
@@ -72,6 +83,10 @@ class DocumentInfo(BaseModel):
     size: int
     chunks: int
 
+class KnowledgeGraphQuery(BaseModel):
+    query: str
+    depth: int = 2
+
 @app.get("/")
 async def health_check():
     return {
@@ -81,6 +96,125 @@ async def health_check():
         "company_configured": bool(company_data["name"]),
         "documents_loaded": len(company_data["documents"])
     }
+
+def create_knowledge_graph(tx, company_name, industry, processes, goals):
+    """Create initial knowledge graph structure for company"""
+    
+    # Create Company node
+    tx.run("""
+        MERGE (c:Company {name: $name, industry: $industry})
+        SET c.created_at = datetime()
+        """, name=company_name, industry=industry)
+    
+    # Create Process nodes and relationships
+    for process in processes:
+        tx.run("""
+            MERGE (p:Process {name: $process})
+            MERGE (c:Company {name: $company})
+            MERGE (c)-[:HAS_PROCESS]->(p)
+            """, process=process, company=company_name)
+    
+    # Create Goal nodes and relationships
+    for goal in goals:
+        tx.run("""
+            MERGE (g:Goal {description: $goal})
+            MERGE (c:Company {name: $company})
+            MERGE (c)-[:HAS_GOAL]->(g)
+            """, goal=goal, company=company_name)
+
+def extract_entities_and_relationships(text, document_id, document_type):
+    """Extract entities and relationships from document text"""
+    
+    # Use Gemini to extract entities and relationships
+    prompt = f"""
+    Analyze this text and extract:
+    1. Key entities (people, departments, products, concepts, locations)
+    2. Relationships between entities
+    3. Important concepts and their definitions
+    
+    Text: {text[:2000]}  # Limit for API
+    
+    Return as JSON:
+    {{
+        "entities": [
+            {{"name": "entity_name", "type": "PERSON|DEPARTMENT|PRODUCT|CONCEPT|LOCATION", "description": "brief description"}}
+        ],
+        "relationships": [
+            {{"from": "entity1", "to": "entity2", "type": "WORKS_IN|MANAGES|USES|LOCATED_IN|PART_OF", "description": "relationship description"}}
+        ],
+        "concepts": [
+            {{"name": "concept_name", "definition": "definition", "importance": "HIGH|MEDIUM|LOW"}}
+        ]
+    }}
+    """
+    
+    try:
+        if GOOGLE_API_KEY:
+            response = model.generate_content(prompt)
+            result = json.loads(response.text)
+            return result
+    except:
+        # Fallback: simple entity extraction
+        return {
+            "entities": [],
+            "relationships": [],
+            "concepts": []
+        }
+
+def add_document_to_knowledge_graph(tx, document_id, filename, document_type, entities, relationships, concepts, company_name):
+    """Add document and its extracted knowledge to the graph"""
+    
+    # Create Document node
+    tx.run("""
+        MERGE (d:Document {id: $doc_id, filename: $filename, type: $doc_type})
+        MERGE (c:Company {name: $company})
+        MERGE (c)-[:HAS_DOCUMENT]->(d)
+        """, doc_id=document_id, filename=filename, doc_type=document_type, company=company_name)
+    
+    # Create Entity nodes and relationships
+    for entity in entities:
+        tx.run("""
+            MERGE (e:Entity {name: $name, type: $type})
+            MERGE (d:Document {id: $doc_id})
+            MERGE (d)-[:MENTIONS]->(e)
+            SET e.description = $description
+            """, name=entity["name"], type=entity["type"], doc_id=document_id, 
+                 description=entity.get("description", ""))
+    
+    # Create Relationship nodes
+    for rel in relationships:
+        tx.run("""
+            MERGE (e1:Entity {name: $from_entity})
+            MERGE (e2:Entity {name: $to_entity})
+            MERGE (e1)-[r:RELATES_TO {type: $rel_type}]->(e2)
+            SET r.description = $description
+            """, from_entity=rel["from"], to_entity=rel["to"], rel_type=rel["type"], 
+                 description=rel.get("description", ""))
+    
+    # Create Concept nodes
+    for concept in concepts:
+        tx.run("""
+            MERGE (c:Concept {name: $name})
+            MERGE (d:Document {id: $doc_id})
+            MERGE (d)-[:DEFINES]->(c)
+            SET c.definition = $definition, c.importance = $importance
+            """, name=concept["name"], doc_id=document_id, 
+                 definition=concept["definition"], importance=concept["importance"])
+
+def query_knowledge_graph(tx, query, depth=2):
+    """Query the knowledge graph for relevant information"""
+    
+    # Cypher query to find relevant entities and relationships
+    cypher_query = """
+    MATCH (n)-[r*1..2]-(m)
+    WHERE toLower(n.name) CONTAINS toLower($query) 
+       OR toLower(m.name) CONTAINS toLower($query)
+    RETURN n, r, m
+    LIMIT 50
+    """
+    
+    result = tx.run(cypher_query, query=query)
+    return [record.data() for record in result]
 
 @app.post("/setup-company")
 async def setup_company(setup: CompanySetup):
@@ -94,6 +228,12 @@ async def setup_company(setup: CompanySetup):
         "business_processes": setup.key_processes,
         "goals": setup.goals
     })
+    
+    # Create knowledge graph structure
+    with neo4j_driver.session() as session:
+        session.execute_write(create_knowledge_graph, 
+                            setup.name, setup.industry, 
+                            setup.key_processes, setup.goals)
     
     # Generate initial context summary
     context_prompt = f"""
@@ -171,6 +311,20 @@ async def upload_document(
             ids=[f"{document_id}_{i}" for i in range(len(chunks))]
         )
         
+        # Extract entities and relationships for knowledge graph
+        extracted_knowledge = extract_entities_and_relationships(
+            text_content, document_id, document_type
+        )
+        
+        # Add to knowledge graph
+        with neo4j_driver.session() as session:
+            session.execute_write(add_document_to_knowledge_graph,
+                                document_id, file.filename, document_type,
+                                extracted_knowledge["entities"],
+                                extracted_knowledge["relationships"],
+                                extracted_knowledge["concepts"],
+                                company_data["name"])
+        
         # Update company data
         doc_info = DocumentInfo(
             filename=file.filename,
@@ -184,6 +338,8 @@ async def upload_document(
             "status": "success",
             "message": f"Document {file.filename} processed successfully",
             "chunks_created": len(chunks),
+            "entities_extracted": len(extracted_knowledge["entities"]),
+            "relationships_found": len(extracted_knowledge["relationships"]),
             "document_info": doc_info.dict()
         }
         
@@ -203,8 +359,13 @@ async def query_context(query: ContextQuery):
         n_results=5
     )
     
-    # Build context from company data and relevant documents
-    context = build_context(query.query, results, query.context_type)
+    # Query knowledge graph
+    graph_results = []
+    with neo4j_driver.session() as session:
+        graph_results = session.execute_read(query_knowledge_graph, query.query, 2)
+    
+    # Build context from company data, relevant documents, and knowledge graph
+    context = build_context(query.query, results, query.context_type, graph_results)
     
     # Generate AI response with full context
     if GOOGLE_API_KEY:
@@ -217,7 +378,61 @@ async def query_context(query: ContextQuery):
         "context_type": query.context_type,
         "response": response,
         "relevant_documents": results["metadatas"][0] if results["metadatas"] else [],
+        "knowledge_graph_results": len(graph_results),
         "context_used": context["summary"]
+    }
+
+@app.post("/query-knowledge-graph")
+async def query_knowledge_graph_endpoint(query: KnowledgeGraphQuery):
+    """Query the knowledge graph directly"""
+    
+    if not company_data["name"]:
+        raise HTTPException(status_code=400, detail="Please setup company first")
+    
+    with neo4j_driver.session() as session:
+        results = session.execute_read(query_knowledge_graph, query.query, query.depth)
+    
+    return {
+        "query": query.query,
+        "depth": query.depth,
+        "results": results,
+        "total_relationships": len(results)
+    }
+
+@app.get("/knowledge-graph-stats")
+async def get_knowledge_graph_stats():
+    """Get statistics about the knowledge graph"""
+    
+    if not company_data["name"]:
+        raise HTTPException(status_code=400, detail="Please setup company first")
+    
+    with neo4j_driver.session() as session:
+        # Get node counts by type
+        node_stats = session.run("""
+            MATCH (n)
+            RETURN labels(n)[0] as type, count(n) as count
+            ORDER BY count DESC
+        """).data()
+        
+        # Get relationship counts by type
+        rel_stats = session.run("""
+            MATCH ()-[r]->()
+            RETURN type(r) as type, count(r) as count
+            ORDER BY count DESC
+        """).data()
+        
+        # Get graph density
+        density = session.run("""
+            MATCH (n)
+            MATCH ()-[r]->()
+            RETURN count(n) as nodes, count(r) as relationships
+        """).single()
+    
+    return {
+        "node_types": node_stats,
+        "relationship_types": rel_stats,
+        "total_nodes": density["nodes"] if density else 0,
+        "total_relationships": density["relationships"] if density else 0
     }
 
 @app.get("/company-context")
@@ -289,13 +504,32 @@ def split_text_into_chunks(text: str, chunk_size: int) -> List[str]:
     
     return chunks
 
-def build_context(query: str, search_results: dict, context_type: str) -> dict:
-    """Build comprehensive context from company data and search results"""
+def build_context(query: str, search_results: dict, context_type: str, graph_results: List = None) -> dict:
+    """Build comprehensive context from company data, search results, and knowledge graph"""
     
     # Extract relevant document content
     relevant_docs = []
     if search_results["documents"]:
         relevant_docs = search_results["documents"][0]
+    
+    # Process knowledge graph results
+    graph_context = ""
+    if graph_results:
+        entities = set()
+        relationships = set()
+        for result in graph_results:
+            if "n" in result:
+                entities.add(result["n"].get("name", ""))
+            if "m" in result:
+                entities.add(result["m"].get("name", ""))
+            if "r" in result:
+                relationships.add(str(result["r"]))
+        
+        graph_context = f"""
+        Knowledge Graph Context:
+        Related Entities: {', '.join(list(entities)[:10])}
+        Relationships: {len(relationships)} connections found
+        """
     
     # Build context summary
     context_summary = f"""
@@ -309,11 +543,14 @@ def build_context(query: str, search_results: dict, context_type: str) -> dict:
     
     Relevant Company Knowledge:
     {chr(10).join(relevant_docs[:3]) if relevant_docs else 'No specific documents found'}
+    
+    {graph_context}
     """
     
     return {
         "summary": context_summary,
         "relevant_documents": relevant_docs,
+        "knowledge_graph_results": len(graph_results) if graph_results else 0,
         "company_data": company_data
     }
 
@@ -331,8 +568,9 @@ def generate_contextual_response(query: str, context: dict, context_type: str) -
     Provide a comprehensive, contextually relevant response that:
     1. Uses specific knowledge about {company_data['name']}
     2. References relevant company processes and goals
-    3. Provides actionable insights based on the company's context
-    4. Maintains professional tone appropriate for {context_type} context
+    3. Leverages insights from the knowledge graph if available
+    4. Provides actionable insights based on the company's context
+    5. Maintains professional tone appropriate for {context_type} context
     
     Response:
     """
