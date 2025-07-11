@@ -1,0 +1,7 @@
+{
+  "buildCommand": "cd frontend && npm install && npm run build",
+  "outputDirectory": "frontend/build",
+  "framework": "create-react-app",
+  "installCommand": "echo 'Dependencies installed during build'",
+  "devCommand": "cd frontend && npm start"
+} 

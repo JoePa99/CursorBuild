@@ -1,0 +1,14 @@
+{
+  "name": "blueprint-ai-platform",
+  "version": "1.0.0",
+  "description": "Blueprint AI - Corporate Intelligence Platform",
+  "private": true,
+  "scripts": {
+    "build": "cd frontend && npm install && npm run build",
+    "start": "cd frontend && npm start",
+    "dev": "cd frontend && npm start"
+  },
+  "workspaces": [
+    "frontend"
+  ]
+} 
