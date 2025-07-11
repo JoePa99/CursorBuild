@@ -1,14 +1,10 @@
 [build]
-builder = "nixpacks"
+builder = "dockerfile"
 
 [deploy]
-startCommand = "cd backend && python main.py"
 healthcheckPath = "/health"
 healthcheckTimeout = 300
 restartPolicyType = "on_failure"
 
 [deploy.envs]
-PYTHON_VERSION = "3.10"
-
-[nixpacks]
-startCmd = "cd backend && python main.py" 
+PYTHON_VERSION = "3.10" 
