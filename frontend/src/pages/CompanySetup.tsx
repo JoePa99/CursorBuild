@@ -10,6 +10,9 @@ interface CompanyData {
   goals: string[];
   context_summary: string;
   documents: any[];
+  departments: string[];
+  products_services: string[];
+  key_metrics: string[];
 }
 
 interface CompanySetupProps {
