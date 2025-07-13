@@ -21,9 +21,7 @@ ENV PATH="/app/venv/bin:$PATH"
 RUN pip install --upgrade "pip<24.1" && pip install -r requirements.txt
 
 # Copy application code
-COPY main.py .
-COPY railway.toml .
-COPY runtime.txt .
+COPY . .
 
 # Expose port
 EXPOSE 8000
