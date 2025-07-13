@@ -22,7 +22,6 @@ RUN pip install --upgrade "pip<24.1" && pip install -r requirements.txt
 
 # Copy application code
 COPY main.py .
-COPY Procfile .
 COPY railway.toml .
 COPY runtime.txt .
 
